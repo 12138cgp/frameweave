@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/logo-mark.svg" type="image/svg+xml">
+    <title>封面批量生成器 | EP Cover Batch</title>
+    <!-- 主题桥：⚠️ 下面的 'aicanvas:theme_store' 必须与 web/src/constant/env.ts 的 STORAGE_PREFIX 保持一致。
+         这是静态 HTML，拿不到 TS 常量，改前缀时必须手工同步改这里，否则独立打开本页时读不到主题。
+         （替代宿主站点的 theme.js）：嵌入宿主站点(Next iframe)时由父页 postMessage{type:"theme"} 下发明暗；
+         独立打开时读宿主站点主题 localStorage。暗色样式作用在 body.studio-theme-dark 上，这里统一切换 body 类。 -->
+    <script>
+        (function () {
+            function readTheme() {
+                try { var raw = localStorage.getItem('aicanvas:theme_store'); if (raw) { var t = JSON.parse(raw); return (t && t.state && t.state.theme) || 'light'; } } catch (e) { }
+                return 'light';
+            }
+            function apply(theme) { var b = document.body; if (!b) return; var dark = theme === 'dark'; b.classList.toggle('studio-theme-dark', dark); b.classList.toggle('theme-dark', dark); }
+            function init() { apply(readTheme()); }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+            window.addEventListener('message', function (e) { if (e && e.data && e.data.type === 'theme') apply(e.data.value); });
+            window.addEventListener('storage', function (e) { if (e.key === 'aicanvas:theme_store') apply(readTheme()); });
+        })();
+    </script>
+    <!-- 轻量 i18n 引擎（替代原平台 i18n.js）：页面下方 registerI18n() 注册中英文案；宿主站点当前为中文，默认 zh。 -->
+    <script>
+        (function () {
+            var dict = {}, lang = 'zh';
+            window.StudioI18n = {
+                register: function (d) { for (var k in d) dict[k] = d[k]; },
+                t: function (key) { var e = dict[key]; return e ? (e[lang] != null ? e[lang] : (e.zh != null ? e.zh : key)) : key; },
+                lang: function () { return lang; },
+                set: function (l) { lang = l === 'en' ? 'en' : 'zh'; this.apply(); try { window.dispatchEvent(new Event('studio-lang-change')); } catch (e) { } },
+                apply: function () { var els = document.querySelectorAll('[data-i18n]'); for (var i = 0; i < els.length; i++) { els[i].textContent = this.t(els[i].getAttribute('data-i18n')); } }
+            };
+        })();
+    </script>
+    <!-- 封面文字用的展示字体（离线内嵌，与桌面版一致）+ ZIP 打包库（本地，断网可用） -->
+    <link rel="stylesheet" href="/cover-batch/vendor/css/cover-fonts.css">
+    <script src="/cover-batch/vendor/js/jszip.min.js"></script>
+    <style>
+        :root {
+            --cb-accent: #111111;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: #f8f8f9;
+            color: #1a1a1a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            min-height: 100vh;
+        }
+
+        *::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+        *::-webkit-scrollbar-thumb { background-color: #d8d8d8; border: 3px solid transparent; background-clip: padding-box; border-radius: 10px; }
+        * { scrollbar-width: thin; scrollbar-color: #d8d8d8 transparent; }
+
+        .cb-wrap { max-width: 1280px; margin: 0 auto; padding: 26px 28px 40px; }
+
+        .cb-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+        .cb-head h1 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
+        .cb-head h1::before { content: ""; width: 8px; height: 18px; border-radius: 3px; background: var(--cb-accent); }
+        .cb-head .sub { color: #8b8b93; font-size: 12.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+        .cb-grid { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+
+        .cb-card { background: #fff; border: 1px solid #ececef; border-radius: 18px; padding: 16px; }
+        .cb-card + .cb-card { margin-top: 14px; }
+        .cb-card h2 { margin: 0 0 13px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9aa2; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+        .cb-card h2 .n { width: 19px; height: 19px; border-radius: 6px; background: #f1f1f3; color: #6b6b73; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+
+        .cb-row { display: flex; align-items: center; gap: 9px; margin: 10px 0; }
+        .cb-row:first-of-type { margin-top: 0; }
+        .cb-row:last-child { margin-bottom: 0; }
+        .cb-lbl { color: #6b6b73; font-size: 12.5px; flex: 0 0 50px; }
+        .cb-lbl.w { flex: 0 0 auto; }
+        .cb-grow { flex: 1; min-width: 0; }
+
+        input[type=text].cb-in, input[type=number].cb-in, select.cb-in {
+            background: #fff; border: 1px solid #e2e2e6; color: #1a1a1a; border-radius: 9px;
+            padding: 7px 9px; font-size: 13px; width: 100%; outline: none; transition: border-color .15s;
+            font-family: inherit;
+        }
+        input.cb-in:focus, select.cb-in:focus { border-color: #1a1a1a; }
+        select.cb-in { cursor: pointer; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239a9aa2' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px; }
+
+        input[type=color].cb-color { -webkit-appearance: none; appearance: none; width: 38px; height: 32px; padding: 0; border: 1px solid #e2e2e6; border-radius: 9px; background: #fff; cursor: pointer; flex: 0 0 auto; }
+        input[type=color].cb-color::-webkit-color-swatch-wrapper { padding: 3px; }
+        input[type=color].cb-color::-webkit-color-swatch { border: none; border-radius: 5px; }
+
+        input[type=range].cb-range { -webkit-appearance: none; appearance: none; height: 5px; border-radius: 5px; flex: 1 1 0; min-width: 0; background: #e6e6ea; outline: none; cursor: pointer; }
+        input[type=range].cb-range::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #1a1a1a; border: 2px solid #fff; box-shadow: 0 0 0 1px #d8d8dc; cursor: pointer; }
+        input[type=range].cb-range::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: #1a1a1a; border: 2px solid #fff; cursor: pointer; }
+
+        .cb-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b8b93; min-width: 48px; text-align: right; flex: 0 0 auto; }
+
+        .cb-drop { border: 1.5px dashed #d6d6dc; border-radius: 12px; padding: 20px 14px; text-align: center; cursor: pointer; transition: all .15s; background: #fafafb; }
+        .cb-drop:hover, .cb-drop.over { border-color: #1a1a1a; background: #f3f3f5; }
+        .cb-drop strong { display: block; color: #1a1a1a; margin-bottom: 4px; font-size: 13px; }
+        .cb-drop span { color: #9a9aa2; font-size: 11.5px; }
+        .cb-thumbs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+        .cb-thumbs:empty { margin-top: 0; }
+        .cb-thumb { position: relative; width: 52px; height: 52px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e2e6; }
+        .cb-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .cb-thumb .x { position: absolute; top: 1px; right: 1px; width: 16px; height: 16px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; line-height: 16px; text-align: center; cursor: pointer; }
+        .cb-thumb .x:hover { background: #d9534f; }
+        .cb-note { color: #9a9aa2; font-size: 11px; margin: 9px 0 0; line-height: 1.45; }
+
+        .cb-toggle { display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
+        .cb-toggle input { display: none; }
+        .cb-sw { width: 34px; height: 19px; border-radius: 19px; background: #d8d8dc; position: relative; transition: .18s; flex: 0 0 auto; }
+        .cb-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; transition: .18s; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+        .cb-toggle input:checked + .cb-sw { background: #1a1a1a; }
+        .cb-toggle input:checked + .cb-sw::after { transform: translateX(15px); }
+        .cb-toggle .t { font-size: 12.5px; color: #6b6b73; }
+        .cb-sub { margin-top: 11px; padding-left: 1px; display: none; }
+        .cb-sub.on { display: block; }
+
+        .cb-presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+        .cb-chip { border: 1px solid #e2e2e6; background: #fff; color: #1a1a1a; border-radius: 8px; padding: 5px 9px; font-size: 11.5px; cursor: pointer; transition: .12s; font-family: inherit; white-space: nowrap; }
+        .cb-chip:hover { border-color: #1a1a1a; background: #f6f6f8; }
+        .cb-chip:active { transform: scale(.96); }
+
+        .cb-grid9 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; flex: 0 0 96px; width: 96px; }
+        .cb-grid9 button { aspect-ratio: 1; border: 1px solid #e2e2e6; background: #fff; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; padding: 0; }
+        .cb-grid9 button span { width: 7px; height: 7px; border-radius: 50%; background: #c4c4ca; transition: .12s; }
+        .cb-grid9 button:hover { border-color: #1a1a1a; }
+        .cb-grid9 button.sel { background: #1a1a1a; border-color: #1a1a1a; }
+        .cb-grid9 button.sel span { background: #fff; width: 8px; height: 8px; }
+
+        .cb-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
+        .cb-btn { border: none; border-radius: 11px; padding: 11px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .14s; display: flex; align-items: center; justify-content: center; gap: 7px; }
+        .cb-btn:disabled { opacity: .4; cursor: not-allowed; }
+        .cb-btn-primary { background: #111; color: #fff; }
+        .cb-btn-primary:not(:disabled):hover { background: #000; }
+        .cb-btn-ghost { background: #f3f3f5; color: #1a1a1a; border: 1px solid #e6e6ea; }
+        .cb-btn-ghost:not(:disabled):hover { border-color: #1a1a1a; }
+
+        .cb-stage { background: #fff; border: 1px solid #ececef; border-radius: 18px; min-height: 540px; display: flex; flex-direction: column; align-items: center; padding: 24px; position: relative; overflow: hidden; }
+        .cb-canvas-box { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0; }
+        #cbCanvas { max-width: 100%; max-height: 100%; border-radius: 8px; display: none; box-shadow: 0 18px 50px rgba(0,0,0,.16); }
+        .cb-empty { text-align: center; color: #b0b0b8; }
+        .cb-empty .ico { width: 46px; height: 46px; margin: 0 auto 12px; opacity: .55; }
+        .cb-empty p { margin: 4px 0; font-size: 13px; }
+        .cb-empty .small { font-size: 11.5px; opacity: .8; }
+
+        .cb-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; color: #6b6b73; flex: 0 0 auto; }
+        .cb-nav button { background: #f3f3f5; border: 1px solid #e6e6ea; color: #1a1a1a; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 16px; transition: .12s; }
+        .cb-nav button:hover:not(:disabled) { border-color: #1a1a1a; }
+        .cb-nav button:disabled { opacity: .35; cursor: not-allowed; }
+        .cb-cur { font-family: 'JetBrains Mono', monospace; font-size: 13px; min-width: 150px; text-align: center; color: #1a1a1a; }
+        .cb-cur .dim { color: #9a9aa2; }
+
+        .cb-prog { position: absolute; left: 24px; right: 24px; bottom: 14px; height: 6px; border-radius: 6px; background: #ececef; overflow: hidden; display: none; }
+        .cb-prog .fill { height: 100%; width: 0; background: #111; transition: width .12s; }
+        .cb-prog-label { position: absolute; left: 24px; bottom: 24px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #6b6b73; display: none; }
+
+        /* ===================== 暗色（跟随平台 studio-theme-dark） ===================== */
+        body.studio-theme-dark { background: #0f141d !important; color: #e5e9f0 !important; --cb-accent: #d8dee9; }
+        body.studio-theme-dark .cb-head .sub { color: #8f9aab; }
+        body.studio-theme-dark .cb-card,
+        body.studio-theme-dark .cb-stage { background: #171d29 !important; border-color: #2a3444 !important; }
+        body.studio-theme-dark .cb-card h2 { color: #8f9aab; }
+        body.studio-theme-dark .cb-card h2 .n { background: #111722; color: #9aa6b8; }
+        body.studio-theme-dark .cb-lbl, body.studio-theme-dark .cb-toggle .t { color: #9aa6b8; }
+        body.studio-theme-dark input.cb-in, body.studio-theme-dark select.cb-in,
+        body.studio-theme-dark input[type=color].cb-color { background: #111722 !important; border-color: #334155 !important; color: #e5e9f0 !important; }
+        body.studio-theme-dark input.cb-in:focus, body.studio-theme-dark select.cb-in:focus { border-color: #d8dee9 !important; }
+        body.studio-theme-dark input[type=range].cb-range { background: #2a3444; }
+        body.studio-theme-dark input[type=range].cb-range::-webkit-slider-thumb { background: #d8dee9; border-color: #0f141d; box-shadow: 0 0 0 1px #475569; }
+        body.studio-theme-dark input[type=range].cb-range::-moz-range-thumb { background: #d8dee9; border-color: #0f141d; }
+        body.studio-theme-dark .cb-val { color: #8f9aab; }
+        body.studio-theme-dark .cb-drop { background: #111722; border-color: #334155; }
+        body.studio-theme-dark .cb-drop:hover, body.studio-theme-dark .cb-drop.over { background: #1a2230; border-color: #d8dee9; }
+        body.studio-theme-dark .cb-drop strong { color: #e5e9f0; }
+        body.studio-theme-dark .cb-drop span, body.studio-theme-dark .cb-note { color: #8f9aab; }
+        body.studio-theme-dark .cb-thumb { border-color: #334155; }
+        body.studio-theme-dark .cb-sw { background: #2a3444; }
+        body.studio-theme-dark .cb-toggle input:checked + .cb-sw { background: #d8dee9; }
+        body.studio-theme-dark .cb-toggle input:checked + .cb-sw::after { background: #10141d; }
+        body.studio-theme-dark .cb-grid9 button { background: #111722; border-color: #334155; }
+        body.studio-theme-dark .cb-grid9 button span { background: #5a6678; }
+        body.studio-theme-dark .cb-grid9 button:hover { border-color: #d8dee9; }
+        body.studio-theme-dark .cb-grid9 button.sel { background: #d8dee9; border-color: #d8dee9; }
+        body.studio-theme-dark .cb-grid9 button.sel span { background: #10141d; }
+        body.studio-theme-dark .cb-chip { background: #111722; border-color: #334155; color: #e5e9f0; }
+        body.studio-theme-dark .cb-chip:hover { border-color: #d8dee9; background: #1a2230; }
+        body.studio-theme-dark .cb-btn-primary { background: #d8dee9; color: #10141d; }
+        body.studio-theme-dark .cb-btn-primary:not(:disabled):hover { background: #f1f5f9; }
+        body.studio-theme-dark .cb-btn-ghost { background: #111722; color: #e5e9f0; border-color: #334155; }
+        body.studio-theme-dark .cb-btn-ghost:not(:disabled):hover { border-color: #d8dee9; }
+        body.studio-theme-dark .cb-empty { color: #5a6678; }
+        body.studio-theme-dark .cb-nav button { background: #111722; border-color: #334155; color: #e5e9f0; }
+        body.studio-theme-dark .cb-nav button:hover:not(:disabled) { border-color: #d8dee9; }
+        body.studio-theme-dark .cb-cur { color: #e5e9f0; }
+        body.studio-theme-dark .cb-cur .dim { color: #8f9aab; }
+        body.studio-theme-dark .cb-prog { background: #2a3444; }
+        body.studio-theme-dark .cb-prog .fill { background: #d8dee9; }
+        body.studio-theme-dark .cb-prog-label { color: #9aa6b8; }
+        body.studio-theme-dark #cbCanvas { box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+
+        @media (max-width: 880px) {
+            .cb-grid { grid-template-columns: 1fr; }
+            .cb-stage { min-height: 60vh; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="cb-wrap">
+        <div class="cb-head">
+            <h1 data-i18n="cover.title">封面批量生成器</h1>
+            <span class="sub" data-i18n="cover.subtitle">EP Cover Batch · 上传背景 → 加 EP 号 → 一键导出 ZIP</span>
+        </div>
+
+        <div class="cb-grid">
+            <!-- ========== 左侧控制区 ========== -->
+            <div>
+                <div class="cb-card">
+                    <h2><span class="n">1</span><span data-i18n="cover.bgTitle">背景图</span></h2>
+                    <div class="cb-drop" id="cbDrop">
+                        <strong data-i18n="cover.dropTitle">点击或拖入背景图</strong>
+                        <span data-i18n="cover.dropHint">可一次选多张 · 支持 JPG / PNG / WEBP</span>
+                    </div>
+                    <input type="file" id="cbFile" accept="image/*" multiple hidden>
+                    <div class="cb-thumbs" id="cbThumbs"></div>
+                    <p class="cb-note" id="cbBgNote" data-i18n="cover.bgNoteEmpty">未上传背景。1 张 = 所有封面共用；多张 = 按顺序每集一张（不足循环），并自动把数量设为图片数。</p>
+                </div>
+
+                <div class="cb-card">
+                    <h2><span class="n">2</span><span data-i18n="cover.epTitle">EP 编号</span></h2>
+                    <div class="cb-row">
+                        <label class="cb-lbl" data-i18n="cover.prefix">前缀</label>
+                        <input type="text" id="cbPrefix" value="EP" class="cb-in cb-grow">
+                        <label class="cb-lbl w" data-i18n="cover.start">起始</label>
+                        <input type="number" id="cbStart" value="1" min="0" class="cb-in" style="width:68px">
+                    </div>
+                    <div class="cb-row">
+                        <label class="cb-lbl" data-i18n="cover.count">数量</label>
+                        <input type="number" id="cbCount" value="1" min="1" max="999" class="cb-in cb-grow">
+                        <label class="cb-lbl w" data-i18n="cover.pad">补零</label>
+                        <select id="cbPad" class="cb-in" style="width:78px">
+                            <option value="0" data-i18n="cover.padNone">无</option>
+                            <option value="2" selected>2</option>
+                            <option value="3">3</option>
+                        </select>
+                    </div>
+                    <p class="cb-note" id="cbEpPreview"></p>
+                </div>
+
+                <div class="cb-card">
+                    <h2><span class="n">3</span><span data-i18n="cover.styleTitle">文字样式</span></h2>
+                    <div class="cb-presets" id="cbPresets"></div>
+                    <div class="cb-row">
+                        <label class="cb-lbl" data-i18n="cover.font">字体</label>
+                        <select id="cbFont" class="cb-in cb-grow"></select>
+                    </div>
+                    <div class="cb-row">
+                        <label class="cb-lbl" data-i18n="cover.size">字号</label>
+                        <input type="range" id="cbSize" class="cb-range" min="2" max="40" step="0.5" value="11">
+                        <span class="cb-val" id="cbSizeVal">11%</span>
+                    </div>
+                    <div class="cb-row">
+                        <label class="cb-lbl" data-i18n="cover.color">字色</label>
+                        <input type="color" id="cbColor" class="cb-color" value="#ffffff">
+                        <label class="cb-lbl w" style="margin-left:6px" data-i18n="cover.tracking">字距</label>
+                        <input type="range" id="cbTrack" class="cb-range" min="-10" max="60" step="1" value="0">
+                        <span class="cb-val" id="cbTrackVal">0</span>
+                    </div>
+
+                    <label class="cb-toggle" style="margin-top:11px">
+                        <input type="checkbox" id="cbGradOn">
+                        <span class="cb-sw"></span><span class="t">渐变填充</span>
+                    </label>
+                    <div class="cb-sub" id="cbGradGroup">
+                        <div class="cb-row">
+                            <label class="cb-lbl">末色</label>
+                            <input type="color" id="cbGradColor" class="cb-color" value="#e5a13a">
+                            <label class="cb-lbl w" style="margin-left:6px">方向</label>
+                            <select id="cbGradDir" class="cb-in" style="width:84px">
+                                <option value="v">竖向</option>
+                                <option value="h">横向</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <label class="cb-toggle" style="margin-top:13px">
+                        <input type="checkbox" id="cbStrokeOn" checked>
+                        <span class="cb-sw"></span><span class="t" data-i18n="cover.stroke">描边</span>
+                    </label>
+                    <div class="cb-sub on" id="cbStrokeGroup">
+                        <div class="cb-row">
+                            <label class="cb-lbl" data-i18n="cover.color2">颜色</label>
+                            <input type="color" id="cbStrokeColor" class="cb-color" value="#1a120a">
+                            <label class="cb-lbl w" style="margin-left:6px" data-i18n="cover.width">粗细</label>
+                            <input type="range" id="cbStrokeW" class="cb-range" min="0" max="30" step="0.5" value="7">
+                            <span class="cb-val" id="cbStrokeWVal">7%</span>
+                        </div>
+                    </div>
+
+                    <label class="cb-toggle" style="margin-top:11px">
+                        <input type="checkbox" id="cbStroke2On">
+                        <span class="cb-sw"></span><span class="t">外层描边（双描边）</span>
+                    </label>
+                    <div class="cb-sub" id="cbStroke2Group">
+                        <div class="cb-row">
+                            <label class="cb-lbl">颜色</label>
+                            <input type="color" id="cbStroke2Color" class="cb-color" value="#ffffff">
+                            <label class="cb-lbl w" style="margin-left:6px">粗细</label>
+                            <input type="range" id="cbStroke2W" class="cb-range" min="0" max="40" step="0.5" value="16">
+                            <span class="cb-val" id="cbStroke2WVal">16%</span>
+                        </div>
+                    </div>
+
+                    <label class="cb-toggle" style="margin-top:11px">
+                        <input type="checkbox" id="cbShadowOn" checked>
+                        <span class="cb-sw"></span><span class="t" data-i18n="cover.shadow">阴影</span>
+                    </label>
+                    <div class="cb-sub on" id="cbShadowGroup">
+                        <div class="cb-row">
+                            <label class="cb-lbl" data-i18n="cover.color2">颜色</label>
+                            <input type="color" id="cbShadowColor" class="cb-color" value="#000000">
+                            <label class="cb-lbl w" style="margin-left:6px" data-i18n="cover.blur">虚化</label>
+                            <input type="range" id="cbShadowBlur" class="cb-range" min="0" max="40" step="1" value="12">
+                            <span class="cb-val" id="cbShadowBlurVal">12%</span>
+                        </div>
+                        <div class="cb-row">
+                            <label class="cb-lbl" data-i18n="cover.offset">偏移</label>
+                            <input type="range" id="cbShadowX" class="cb-range" min="-30" max="30" step="1" value="0">
+                            <span class="cb-val" id="cbShadowXVal">X 0</span>
+                            <input type="range" id="cbShadowY" class="cb-range" min="-30" max="30" step="1" value="6">
+                            <span class="cb-val" id="cbShadowYVal">Y 6</span>
+                        </div>
+                    </div>
+
+                    <label class="cb-toggle" style="margin-top:11px">
+                        <input type="checkbox" id="cbGlowOn">
+                        <span class="cb-sw"></span><span class="t">发光（霓虹）</span>
+                    </label>
+                    <div class="cb-sub" id="cbGlowGroup">
+                        <div class="cb-row">
+                            <label class="cb-lbl">发光色</label>
+                            <input type="color" id="cbGlowColor" class="cb-color" value="#37e6ff">
+                            <label class="cb-lbl w" style="margin-left:6px">强度</label>
+                            <input type="range" id="cbGlowStrength" class="cb-range" min="1" max="8" step="1" value="4">
+                            <span class="cb-val" id="cbGlowStrengthVal">4</span>
+                        </div>
+                        <div class="cb-row">
+                            <label class="cb-lbl">范围</label>
+                            <input type="range" id="cbGlowSpread" class="cb-range" min="2" max="40" step="1" value="16">
+                            <span class="cb-val" id="cbGlowSpreadVal">16%</span>
+                        </div>
+                    </div>
+
+                    <label class="cb-toggle" style="margin-top:11px">
+                        <input type="checkbox" id="cbPlateOn">
+                        <span class="cb-sw"></span><span class="t">文字底板</span>
+                    </label>
+                    <div class="cb-sub" id="cbPlateGroup">
+                        <div class="cb-row">
+                            <label class="cb-lbl">底板色</label>
+                            <input type="color" id="cbPlateColor" class="cb-color" value="#000000">
+                            <label class="cb-lbl w" style="margin-left:6px">透明</label>
+                            <input type="range" id="cbPlateAlpha" class="cb-range" min="0" max="100" step="1" value="55">
+                            <span class="cb-val" id="cbPlateAlphaVal">55%</span>
+                        </div>
+                        <div class="cb-row">
+                            <label class="cb-lbl">圆角</label>
+                            <input type="range" id="cbPlateRadius" class="cb-range" min="0" max="50" step="1" value="18">
+                            <span class="cb-val" id="cbPlateRadiusVal">18</span>
+                            <label class="cb-lbl w" style="margin-left:6px">留白</label>
+                            <input type="range" id="cbPlatePad" class="cb-range" min="0" max="60" step="1" value="24">
+                            <span class="cb-val" id="cbPlatePadVal">24</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cb-card">
+                    <h2><span class="n">4</span><span data-i18n="cover.posTitle">位置</span></h2>
+                    <div class="cb-row" style="align-items:flex-start">
+                        <div class="cb-grid9" id="cbGrid9"></div>
+                        <div style="flex:1;min-width:0">
+                            <div class="cb-row" style="margin-top:0">
+                                <label class="cb-lbl" style="flex:0 0 42px" data-i18n="cover.margin">边距</label>
+                                <input type="range" id="cbMargin" class="cb-range" min="0" max="25" step="0.5" value="6">
+                                <span class="cb-val" id="cbMarginVal">6%</span>
+                            </div>
+                            <div class="cb-row">
+                                <label class="cb-lbl" style="flex:0 0 42px" data-i18n="cover.nudgeX">微调X</label>
+                                <input type="range" id="cbNudgeX" class="cb-range" min="-50" max="50" step="1" value="0">
+                                <span class="cb-val" id="cbNudgeXVal">0</span>
+                            </div>
+                            <div class="cb-row">
+                                <label class="cb-lbl" style="flex:0 0 42px" data-i18n="cover.nudgeY">微调Y</label>
+                                <input type="range" id="cbNudgeY" class="cb-range" min="-50" max="50" step="1" value="0">
+                                <span class="cb-val" id="cbNudgeYVal">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cb-actions">
+                    <button class="cb-btn cb-btn-ghost" id="cbExportOne" disabled data-i18n="cover.exportOne">导出当前这张 PNG</button>
+                    <button class="cb-btn cb-btn-primary" id="cbExportAll" disabled data-i18n="cover.exportAll">一键导出全部封面 · ZIP</button>
+                </div>
+                <p class="cb-note" style="text-align:center;margin-top:8px" data-i18n="cover.exportNote">导出为背景原始分辨率的 PNG。字体与打包库全部内嵌，断网也能用。</p>
+            </div>
+
+            <!-- ========== 右侧预览区 ========== -->
+            <div class="cb-stage">
+                <div class="cb-canvas-box">
+                    <canvas id="cbCanvas"></canvas>
+                    <div class="cb-empty" id="cbEmpty">
+                        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <path d="M21 15l-5-5L5 21"></path>
+                        </svg>
+                        <p data-i18n="cover.emptyTitle">上传背景图后这里显示封面预览</p>
+                        <p class="small" data-i18n="cover.emptyHint">左侧上传 → 调样式与位置 → 导出</p>
+                    </div>
+                </div>
+                <div class="cb-nav" id="cbNav" style="display:none">
+                    <button id="cbPrev">‹</button>
+                    <span class="cb-cur" id="cbCur"></span>
+                    <button id="cbNext">›</button>
+                </div>
+                <div class="cb-prog" id="cbProg"><div class="fill" id="cbProgFill"></div></div>
+                <div class="cb-prog-label" id="cbProgLabel"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ====================== i18n 文案（中英） ====================== */
+        (function registerI18n() {
+            if (!window.StudioI18n) return;
+            window.StudioI18n.register({
+                "nav.coverBatch": { zh: "封面批量", en: "Cover Batch" },
+                "cover.title": { zh: "封面批量生成器", en: "EP Cover Batch" },
+                "cover.subtitle": { zh: "EP Cover Batch · 上传背景 → 加 EP 号 → 一键导出 ZIP", en: "Upload background → stamp EP number → export ZIP" },
+                "cover.bgTitle": { zh: "背景图", en: "Background" },
+                "cover.dropTitle": { zh: "点击或拖入背景图", en: "Click or drop background images" },
+                "cover.dropHint": { zh: "可一次选多张 · 支持 JPG / PNG / WEBP", en: "Multiple allowed · JPG / PNG / WEBP" },
+                "cover.bgNoteEmpty": { zh: "未上传背景。1 张 = 所有封面共用；多张 = 按顺序每集一张（不足循环），并自动把数量设为图片数。", en: "No background yet. 1 image = shared by all covers; multiple = one per episode in order (cycles if fewer), and count auto-sets to image count." },
+                "cover.epTitle": { zh: "EP 编号", en: "EP Numbering" },
+                "cover.prefix": { zh: "前缀", en: "Prefix" },
+                "cover.start": { zh: "起始", en: "Start" },
+                "cover.count": { zh: "数量", en: "Count" },
+                "cover.pad": { zh: "补零", en: "Pad" },
+                "cover.padNone": { zh: "无", en: "None" },
+                "cover.styleTitle": { zh: "文字样式", en: "Text Style" },
+                "cover.font": { zh: "字体", en: "Font" },
+                "cover.size": { zh: "字号", en: "Size" },
+                "cover.color": { zh: "字色", en: "Color" },
+                "cover.color2": { zh: "颜色", en: "Color" },
+                "cover.tracking": { zh: "字距", en: "Spacing" },
+                "cover.stroke": { zh: "描边", en: "Stroke" },
+                "cover.width": { zh: "粗细", en: "Width" },
+                "cover.shadow": { zh: "阴影", en: "Shadow" },
+                "cover.blur": { zh: "虚化", en: "Blur" },
+                "cover.offset": { zh: "偏移", en: "Offset" },
+                "cover.posTitle": { zh: "位置", en: "Position" },
+                "cover.margin": { zh: "边距", en: "Margin" },
+                "cover.nudgeX": { zh: "微调X", en: "Nudge X" },
+                "cover.nudgeY": { zh: "微调Y", en: "Nudge Y" },
+                "cover.exportOne": { zh: "导出当前这张 PNG", en: "Export Current PNG" },
+                "cover.exportAll": { zh: "一键导出全部封面 · ZIP", en: "Export All Covers · ZIP" },
+                "cover.exportNote": { zh: "导出为背景原始分辨率的 PNG。字体与打包库全部内嵌，断网也能用。", en: "Exports PNGs at the background's native resolution. Fonts and zip library are bundled — works offline." },
+                "cover.emptyTitle": { zh: "上传背景图后这里显示封面预览", en: "Upload a background to preview covers here" },
+                "cover.emptyHint": { zh: "左侧上传 → 调样式与位置 → 导出", en: "Upload on the left → adjust → export" },
+                "cover.bgNoteOne": { zh: "已上传 1 张：所有封面共用此背景。", en: "1 image uploaded: shared by all covers." },
+                "cover.willGen": { zh: "将生成 {n} 张：", en: "Will generate {n}: " }
+            });
+            try { window.StudioI18n.apply(); } catch (e) { }
+        })();
+
+        function tr(key) { return window.StudioI18n ? window.StudioI18n.t(key) : key; }
+        function isEn() { return window.StudioI18n && window.StudioI18n.lang && window.StudioI18n.lang() === 'en'; }
+
+        /* 接收父壳语言切换（主题由 theme.js 自动处理） */
+        window.addEventListener('message', function (event) {
+            if (event.data && event.data.type === 'studio-lang' && window.StudioI18n) {
+                window.StudioI18n.set(event.data.lang);
+            }
+        });
+        window.addEventListener('studio-lang-change', function () { refreshDynamicText(); });
+
+        /* ====================== 字体清单（与 cover-fonts.css 对应） ====================== */
+        const SYSTEM_FONTS = [
+            { family: "Impact, 'Arial Black', sans-serif", label: "Impact · 系统粗黑", cat: "系统字体", weight: 400, system: true },
+            { family: "Georgia, 'Times New Roman', serif", label: "Georgia · 系统衬线", cat: "系统字体", weight: 700, system: true },
+            { family: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", label: "系统无衬线", cat: "系统字体", weight: 800, system: true },
+        ];
+        const EMBEDDED_FONTS = [
+            { family: "Anton", label: "Anton · 重黑窄体", cat: "标准 / 冲击", weight: 400 },
+            { family: "Bebas Neue", label: "Bebas Neue · 高窄体", cat: "标准 / 冲击", weight: 400 },
+            { family: "Oswald", label: "Oswald · 粗窄无衬线", cat: "标准 / 冲击", weight: 700 },
+            { family: "Alfa Slab One", label: "Alfa Slab · 重板衬线", cat: "标准 / 冲击", weight: 400 },
+            { family: "Righteous", label: "Righteous · 几何体", cat: "标准 / 冲击", weight: 400 },
+            { family: "Cinzel", label: "Cinzel · 史诗罗马体", cat: "史诗 / 古典", weight: 700 },
+            { family: "Cinzel Decorative", label: "Cinzel Deco · 花体罗马", cat: "史诗 / 古典", weight: 700 },
+            { family: "Cormorant Garamond", label: "Cormorant · 优雅衬线", cat: "史诗 / 古典", weight: 600 },
+            { family: "Playfair Display", label: "Playfair · 高反差衬线", cat: "优雅 / 时尚", weight: 800 },
+            { family: "Abril Fatface", label: "Abril Fatface · 时尚展示", cat: "优雅 / 时尚", weight: 400 },
+            { family: "Pirata One", label: "Pirata One · 哥特黑体", cat: "黑暗 / 哥特", weight: 400 },
+            { family: "UnifrakturCook", label: "Unifraktur · 中世纪黑体", cat: "黑暗 / 哥特", weight: 700 },
+            { family: "Creepster", label: "Creepster · 恐怖体", cat: "恐怖 / 惊悚", weight: 400 },
+            { family: "Bangers", label: "Bangers · 漫画冲击体", cat: "趣味 / 漫画", weight: 400 },
+            { family: "Special Elite", label: "Special Elite · 打字机", cat: "复古 / 打字机", weight: 400 },
+            { family: "Monoton", label: "Monoton · 霓虹线条体", cat: "复古 / 打字机", weight: 400 },
+            { family: "Smiley Sans", label: "得意黑 · 中文冲击黑", cat: "中文字体", weight: 400 },
+            { family: "ZCOOL KuaiLe", label: "站酷快乐体 · 中文圆趣", cat: "中文字体", weight: 400 },
+            { family: "Archivo Black", label: "Archivo Black · 方正超黑", cat: "标准 / 冲击", weight: 400 },
+            { family: "League Gothic", label: "League Gothic · 极致窄体", cat: "标准 / 冲击", weight: 400 },
+            { family: "Titan One", label: "Titan One · 可爱圆黑", cat: "趣味 / 漫画", weight: 400 },
+            { family: "Bungee", label: "Bungee · 都市招牌", cat: "趣味 / 漫画", weight: 400 },
+            { family: "Permanent Marker", label: "Permanent Marker · 马克笔手写", cat: "手写 / 涂鸦", weight: 400 },
+            { family: "Orbitron", label: "Orbitron · 科技几何", cat: "科技 / 未来", weight: 700 },
+            { family: "Black Ops One", label: "Black Ops · 军事喷涂", cat: "科技 / 未来", weight: 400 },
+            { family: "Yeseva One", label: "Yeseva One · 时尚衬线", cat: "优雅 / 时尚", weight: 400 },
+        ].map(f => ({ ...f, system: false }));
+        const ALL_FONTS = SYSTEM_FONTS.concat(EMBEDDED_FONTS);
+
+        const $ = id => document.getElementById(id);
+        const state = { bgs: [], curIndex: 0, anchor: "tl" };
+
+        /* 字体下拉（按类别分组） */
+        (function buildFontSelect() {
+            const sel = $("cbFont");
+            const cats = {};
+            ALL_FONTS.forEach((f, i) => { (cats[f.cat] = cats[f.cat] || []).push({ ...f, i }); });
+            Object.keys(cats).forEach(cat => {
+                const og = document.createElement("optgroup");
+                og.label = cat;
+                cats[cat].forEach(f => {
+                    const o = document.createElement("option");
+                    o.value = f.i; o.textContent = f.label;
+                    og.appendChild(o);
+                });
+                sel.appendChild(og);
+            });
+            const firstEmbedded = ALL_FONTS.findIndex(f => !f.system);
+            sel.value = firstEmbedded >= 0 ? firstEmbedded : 0;
+        })();
+
+        function cfg() {
+            const f = ALL_FONTS[+$("cbFont").value];
+            return {
+                prefix: $("cbPrefix").value,
+                start: parseInt($("cbStart").value) || 0,
+                count: Math.max(1, parseInt($("cbCount").value) || 1),
+                pad: parseInt($("cbPad").value) || 0,
+                font: f,
+                sizePct: parseFloat($("cbSize").value),
+                color: $("cbColor").value,
+                tracking: parseInt($("cbTrack").value),
+                strokeOn: $("cbStrokeOn").checked,
+                strokeColor: $("cbStrokeColor").value,
+                strokePct: parseFloat($("cbStrokeW").value),
+                shadowOn: $("cbShadowOn").checked,
+                shadowColor: $("cbShadowColor").value,
+                shadowBlurPct: parseFloat($("cbShadowBlur").value),
+                shadowXPct: parseFloat($("cbShadowX").value),
+                shadowYPct: parseFloat($("cbShadowY").value),
+                anchor: state.anchor || "tl",
+                marginPct: parseFloat($("cbMargin").value),
+                nudgeXPct: parseFloat($("cbNudgeX").value),
+                nudgeYPct: parseFloat($("cbNudgeY").value),
+                gradOn: $("cbGradOn").checked,
+                gradColor: $("cbGradColor").value,
+                gradDir: $("cbGradDir").value,
+                stroke2On: $("cbStroke2On").checked,
+                stroke2Color: $("cbStroke2Color").value,
+                stroke2Pct: parseFloat($("cbStroke2W").value),
+                glowOn: $("cbGlowOn").checked,
+                glowColor: $("cbGlowColor").value,
+                glowStrength: parseInt($("cbGlowStrength").value) || 1,
+                glowSpreadPct: parseFloat($("cbGlowSpread").value),
+                plateOn: $("cbPlateOn").checked,
+                plateColor: $("cbPlateColor").value,
+                plateAlpha: parseFloat($("cbPlateAlpha").value),
+                plateRadius: parseFloat($("cbPlateRadius").value),
+                platePad: parseFloat($("cbPlatePad").value),
+            };
+        }
+
+        function labelFor(c, i) {
+            let n = String(c.start + i);
+            if (c.pad > 0) n = n.padStart(c.pad, "0");
+            return c.prefix + n;
+        }
+        function bgForIndex(i) {
+            if (state.bgs.length === 0) return null;
+            if (state.bgs.length === 1) return state.bgs[0];
+            return state.bgs[i % state.bgs.length];
+        }
+
+        async function ensureFont(font, px) {
+            if (font.system) return;
+            try { await document.fonts.load(`${font.weight} ${Math.round(px)}px "${font.family}"`); } catch (e) { }
+        }
+        function fontString(font, px) {
+            return font.system ? `${font.weight} ${px}px ${font.family}` : `${font.weight} ${px}px "${font.family}", sans-serif`;
+        }
+        function roundRectPath(ctx, x, y, w, h, r) {
+            r = Math.max(0, Math.min(r, w / 2, h / 2));
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+        }
+
+        async function renderTo(canvas, idx, c) {
+            const bg = bgForIndex(idx);
+            if (!bg) return;
+            const W = bg.w, H = bg.h;
+            canvas.width = W; canvas.height = H;
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, W, H);
+            ctx.drawImage(bg.img, 0, 0, W, H);
+
+            const px = H * c.sizePct / 100;
+            await ensureFont(c.font, px);
+
+            ctx.font = fontString(c.font, px);
+            ctx.textBaseline = "alphabetic";
+            if ("letterSpacing" in ctx) { try { ctx.letterSpacing = (px * c.tracking / 100) + "px"; } catch (e) { } }
+            ctx.lineJoin = "round";
+            ctx.miterLimit = 2;
+
+            const text = labelFor(c, idx);
+            const margin = Math.min(W, H) * c.marginPct / 100;
+            const nx = W * c.nudgeXPct / 100;
+            const ny = H * c.nudgeYPct / 100;
+
+            let x, align;
+            const col = c.anchor[1] === "l" ? 0 : c.anchor[1] === "c" ? 1 : 2;
+            if (col === 0) { align = "left"; x = margin; }
+            else if (col === 1) { align = "center"; x = W / 2; }
+            else { align = "right"; x = W - margin; }
+            ctx.textAlign = align;
+
+            const m = ctx.measureText(text);
+            const ascent = m.actualBoundingBoxAscent || px * 0.72;
+            const descent = m.actualBoundingBoxDescent || px * 0.20;
+            let y;
+            const rowChar = c.anchor[0];
+            if (rowChar === "t") { y = margin + ascent; }
+            else if (rowChar === "m") { y = H / 2 + (ascent - descent) / 2; }
+            else { y = H - margin - descent; }
+
+            x += nx; y += ny;
+
+            // 文字包围盒（底板 / 渐变填充用）
+            const textW = ctx.measureText(text).width;
+            let left;
+            if (align === "left") left = x;
+            else if (align === "center") left = x - textW / 2;
+            else left = x - textW;
+            const top = y - ascent, bot = y + descent;
+
+            function clearShadow() { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+            function applyShadow(on) {
+                if (on && c.shadowOn) {
+                    ctx.shadowColor = c.shadowColor;
+                    ctx.shadowBlur = px * c.shadowBlurPct / 100;
+                    ctx.shadowOffsetX = px * c.shadowXPct / 100;
+                    ctx.shadowOffsetY = px * c.shadowYPct / 100;
+                } else { clearShadow(); }
+            }
+
+            // 1) 文字底板（最底层）
+            if (c.plateOn) {
+                ctx.save();
+                clearShadow();
+                const pad = px * c.platePad / 100;
+                const rw = textW + pad * 2, rh = (ascent + descent) + pad * 2;
+                ctx.globalAlpha = Math.max(0, Math.min(1, c.plateAlpha / 100));
+                ctx.fillStyle = c.plateColor;
+                roundRectPath(ctx, left - pad, top - pad, rw, rh, px * c.plateRadius / 100);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 2) 发光（霓虹辉光，text ink 之下；多遍叠加 + lighter 加色，越叠越亮）
+            if (c.glowOn) {
+                ctx.save();
+                clearShadow();
+                ctx.globalCompositeOperation = "lighter";
+                ctx.fillStyle = c.glowColor;
+                ctx.shadowColor = c.glowColor;
+                ctx.shadowBlur = px * c.glowSpreadPct / 100;
+                for (let g = 0; g < c.glowStrength; g++) ctx.fillText(text, x, y);
+                ctx.restore();
+            }
+
+            // 3) 墨迹层：外描边 → 内描边 → 填充（阴影只挂最外一遍，防重影发灰）
+            const layers = [];
+            if (c.stroke2On && c.stroke2Pct > 0) layers.push({ s: true, w: c.stroke2Pct, col: c.stroke2Color });
+            if (c.strokeOn && c.strokePct > 0) layers.push({ s: true, w: c.strokePct, col: c.strokeColor });
+            layers.push({ s: false });
+            layers.forEach((L, li) => {
+                applyShadow(li === 0);
+                if (L.s) {
+                    ctx.lineWidth = px * L.w / 100;
+                    ctx.strokeStyle = L.col;
+                    ctx.strokeText(text, x, y);
+                } else {
+                    if (c.gradOn) {
+                        const grad = c.gradDir === "h"
+                            ? ctx.createLinearGradient(left, 0, left + textW, 0)
+                            : ctx.createLinearGradient(0, top, 0, bot);
+                        grad.addColorStop(0, c.color);
+                        grad.addColorStop(1, c.gradColor);
+                        ctx.fillStyle = grad;
+                    } else {
+                        ctx.fillStyle = c.color;
+                    }
+                    ctx.fillText(text, x, y);
+                }
+            });
+            clearShadow();
+        }
+
+        let renderToken = 0;
+        async function updatePreview() {
+            const canvas = $("cbCanvas");
+            if (state.bgs.length === 0) {
+                canvas.style.display = "none";
+                $("cbEmpty").style.display = "block";
+                $("cbNav").style.display = "none";
+                $("cbExportOne").disabled = true;
+                $("cbExportAll").disabled = true;
+                return;
+            }
+            const c = cfg();
+            if (state.curIndex >= c.count) state.curIndex = c.count - 1;
+            if (state.curIndex < 0) state.curIndex = 0;
+
+            const my = ++renderToken;
+            await renderTo(canvas, state.curIndex, c);
+            if (my !== renderToken) return;
+
+            canvas.style.display = "block";
+            $("cbEmpty").style.display = "none";
+            $("cbNav").style.display = "flex";
+            $("cbExportOne").disabled = false;
+            $("cbExportAll").disabled = false;
+
+            const bg = bgForIndex(state.curIndex);
+            $("cbCur").innerHTML = `${labelFor(c, state.curIndex)} <span class="dim">· ${state.curIndex + 1}/${c.count} · ${bg.w}×${bg.h}</span>`;
+            $("cbPrev").disabled = state.curIndex === 0;
+            $("cbNext").disabled = state.curIndex === c.count - 1;
+            updateEpPreview(c);
+        }
+
+        function updateEpPreview(c) {
+            c = c || cfg();
+            const eps = [];
+            for (let i = 0; i < Math.min(c.count, 4); i++) eps.push(labelFor(c, i));
+            let s = eps.join(" · ");
+            if (c.count > 4) s += " … " + labelFor(c, c.count - 1);
+            $("cbEpPreview").textContent = tr("cover.willGen").replace("{n}", c.count) + s;
+        }
+
+        function renderThumbs() {
+            const box = $("cbThumbs"); box.innerHTML = "";
+            state.bgs.forEach((b, i) => {
+                const d = document.createElement("div");
+                d.className = "cb-thumb";
+                d.innerHTML = `<img src="${b.url}"><div class="x" data-i="${i}">×</div>`;
+                box.appendChild(d);
+            });
+            box.querySelectorAll(".x").forEach(x => x.onclick = e => {
+                const i = +e.target.dataset.i;
+                URL.revokeObjectURL(state.bgs[i].url);
+                state.bgs.splice(i, 1);
+                afterBgChange();
+            });
+            updateBgNote();
+        }
+
+        function updateBgNote() {
+            const n = state.bgs.length;
+            if (n === 0) $("cbBgNote").textContent = tr("cover.bgNoteEmpty");
+            else if (n === 1) $("cbBgNote").textContent = tr("cover.bgNoteOne");
+            else $("cbBgNote").textContent = isEn()
+                ? `${n} images uploaded: one per episode in order, count auto-set to ${n}.`
+                : `已上传 ${n} 张：按顺序每集一张，数量已自动设为 ${n}。`;
+        }
+
+        function refreshDynamicText() {
+            updateBgNote();
+            if (state.bgs.length) updateEpPreview(); else updateEpPreview();
+        }
+
+        function afterBgChange() {
+            renderThumbs();
+            if (state.bgs.length > 1) { $("cbCount").value = state.bgs.length; }
+            updatePreview();
+        }
+
+        function loadFiles(files) {
+            const imgs = [...files].filter(f => f.type.startsWith("image/"));
+            let pending = imgs.length;
+            if (!pending) return;
+            imgs.forEach(file => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    state.bgs.push({ img, name: file.name, url, w: img.naturalWidth, h: img.naturalHeight });
+                    if (--pending === 0) afterBgChange();
+                };
+                img.onerror = () => { if (--pending === 0) afterBgChange(); };
+                img.src = url;
+            });
+        }
+
+        function saveBlob(blob, filename) {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        }
+        function sanitize(s) { return s.replace(/[\\/:*?"<>|]/g, "_").trim() || "cover"; }
+
+        async function exportOne() {
+            const c = cfg();
+            const canvas = document.createElement("canvas");
+            await renderTo(canvas, state.curIndex, c);
+            canvas.toBlob(b => saveBlob(b, sanitize(labelFor(c, state.curIndex)) + ".png"), "image/png");
+        }
+
+        let exporting = false;
+        async function exportAll() {
+            if (exporting) return;
+            if (typeof JSZip === "undefined") { alert("JSZip 未加载"); return; }
+            exporting = true;
+            const c = cfg();
+            const zip = new JSZip();
+            const prog = $("cbProg"), fill = $("cbProgFill"), plabel = $("cbProgLabel");
+            prog.style.display = "block"; plabel.style.display = "block";
+            $("cbExportAll").disabled = true; $("cbExportOne").disabled = true;
+
+            const canvas = document.createElement("canvas");
+            for (let i = 0; i < c.count; i++) {
+                await renderTo(canvas, i, c);
+                const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+                zip.file(sanitize(labelFor(c, i)) + ".png", blob);
+                const pct = Math.round((i + 1) / c.count * 100);
+                fill.style.width = pct + "%";
+                plabel.textContent = (isEn() ? "Rendering cover " : "渲染封面 ") + (i + 1) + "/" + c.count;
+                if (i % 3 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+            plabel.textContent = isEn() ? "Packing ZIP…" : "正在打包 ZIP…";
+            const out = await zip.generateAsync({ type: "blob" }, meta => { fill.style.width = (50 + meta.percent / 2) + "%"; });
+            saveBlob(out, sanitize(c.prefix || "EP") + `_covers_${c.count}.zip`);
+
+            plabel.textContent = (isEn() ? "✓ Exported " : "✓ 已导出 ") + c.count + (isEn() ? "" : " 张");
+            setTimeout(() => { prog.style.display = "none"; plabel.style.display = "none"; fill.style.width = "0"; }, 1800);
+            $("cbExportAll").disabled = false; $("cbExportOne").disabled = false;
+            exporting = false;
+        }
+
+        /* 九宫格 */
+        (function buildGrid() {
+            const anchors = ["tl", "tc", "tr", "ml", "mc", "mr", "bl", "bc", "br"];
+            const g = $("cbGrid9");
+            anchors.forEach(a => {
+                const b = document.createElement("button");
+                b.type = "button"; b.dataset.a = a; b.innerHTML = "<span></span>";
+                if (a === "tl") b.classList.add("sel");
+                b.onclick = () => {
+                    g.querySelectorAll("button").forEach(x => x.classList.remove("sel"));
+                    b.classList.add("sel"); state.anchor = a; updatePreview();
+                };
+                g.appendChild(b);
+            });
+        })();
+
+        /* 事件 */
+        let dt;
+        function onChange() { clearTimeout(dt); dt = setTimeout(updatePreview, 60); }
+        function updateValLabels() {
+            $("cbSizeVal").textContent = $("cbSize").value + "%";
+            $("cbTrackVal").textContent = $("cbTrack").value;
+            $("cbStrokeWVal").textContent = $("cbStrokeW").value + "%";
+            $("cbShadowBlurVal").textContent = $("cbShadowBlur").value + "%";
+            $("cbShadowXVal").textContent = "X " + $("cbShadowX").value;
+            $("cbShadowYVal").textContent = "Y " + $("cbShadowY").value;
+            $("cbMarginVal").textContent = $("cbMargin").value + "%";
+            $("cbNudgeXVal").textContent = $("cbNudgeX").value;
+            $("cbNudgeYVal").textContent = $("cbNudgeY").value;
+            $("cbStroke2WVal").textContent = $("cbStroke2W").value + "%";
+            $("cbGlowStrengthVal").textContent = $("cbGlowStrength").value;
+            $("cbGlowSpreadVal").textContent = $("cbGlowSpread").value + "%";
+            $("cbPlateAlphaVal").textContent = $("cbPlateAlpha").value + "%";
+            $("cbPlateRadiusVal").textContent = $("cbPlateRadius").value;
+            $("cbPlatePadVal").textContent = $("cbPlatePad").value;
+            $("cbStrokeGroup").classList.toggle("on", $("cbStrokeOn").checked);
+            $("cbShadowGroup").classList.toggle("on", $("cbShadowOn").checked);
+            $("cbGradGroup").classList.toggle("on", $("cbGradOn").checked);
+            $("cbStroke2Group").classList.toggle("on", $("cbStroke2On").checked);
+            $("cbGlowGroup").classList.toggle("on", $("cbGlowOn").checked);
+            $("cbPlateGroup").classList.toggle("on", $("cbPlateOn").checked);
+        }
+        ["cbPrefix", "cbStart", "cbCount", "cbPad", "cbFont", "cbSize", "cbColor", "cbTrack",
+            "cbGradOn", "cbGradColor", "cbGradDir",
+            "cbStrokeOn", "cbStrokeColor", "cbStrokeW", "cbStroke2On", "cbStroke2Color", "cbStroke2W",
+            "cbShadowOn", "cbShadowColor", "cbShadowBlur", "cbShadowX", "cbShadowY",
+            "cbGlowOn", "cbGlowColor", "cbGlowStrength", "cbGlowSpread",
+            "cbPlateOn", "cbPlateColor", "cbPlateAlpha", "cbPlateRadius", "cbPlatePad",
+            "cbMargin", "cbNudgeX", "cbNudgeY"].forEach(id => {
+                const el = $(id);
+                el.addEventListener("input", onChange);
+                el.addEventListener("change", onChange);
+            });
+        document.addEventListener("input", updateValLabels);
+        updateValLabels();
+
+        $("cbPrev").onclick = () => { if (state.curIndex > 0) { state.curIndex--; updatePreview(); } };
+        $("cbNext").onclick = () => { state.curIndex++; updatePreview(); };
+        $("cbExportOne").onclick = exportOne;
+        $("cbExportAll").onclick = exportAll;
+
+        const drop = $("cbDrop"), fileInput = $("cbFile");
+        drop.onclick = () => fileInput.click();
+        fileInput.onchange = e => { loadFiles(e.target.files); fileInput.value = ""; };
+        ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+        ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+        drop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
+        window.addEventListener("dragover", e => e.preventDefault());
+        window.addEventListener("drop", e => { e.preventDefault(); if (e.target !== fileInput) loadFiles(e.dataTransfer.files); });
+
+        /* 预设一键样式：只设置文字效果控件，不动字体/EP/位置 */
+        const PRESETS = [
+            { name: "素白", set: { cbColor: "#ffffff", cbGradOn: false, cbStrokeOn: true, cbStrokeColor: "#1a120a", cbStrokeW: "7", cbStroke2On: false, cbShadowOn: true, cbShadowColor: "#000000", cbShadowBlur: "12", cbShadowX: "0", cbShadowY: "6", cbGlowOn: false, cbPlateOn: false } },
+            { name: "金渐变", set: { cbColor: "#fff2b0", cbGradOn: true, cbGradColor: "#dc9326", cbGradDir: "v", cbStrokeOn: true, cbStrokeColor: "#3d2607", cbStrokeW: "6", cbStroke2On: false, cbShadowOn: true, cbShadowColor: "#000000", cbShadowBlur: "9", cbShadowX: "0", cbShadowY: "5", cbGlowOn: false, cbPlateOn: false } },
+            { name: "霓虹粉", set: { cbColor: "#ffffff", cbGradOn: false, cbStrokeOn: true, cbStrokeColor: "#ff2d9b", cbStrokeW: "4", cbStroke2On: false, cbShadowOn: false, cbGlowOn: true, cbGlowColor: "#ff2d9b", cbGlowStrength: "5", cbGlowSpread: "18", cbPlateOn: false } },
+            { name: "赛博青", set: { cbColor: "#eaffff", cbGradOn: false, cbStrokeOn: true, cbStrokeColor: "#0bd3ff", cbStrokeW: "3", cbStroke2On: false, cbShadowOn: false, cbGlowOn: true, cbGlowColor: "#18e0ff", cbGlowStrength: "6", cbGlowSpread: "20", cbPlateOn: false } },
+            { name: "血色", set: { cbColor: "#e10600", cbGradOn: true, cbGradColor: "#6e0000", cbGradDir: "v", cbStrokeOn: true, cbStrokeColor: "#000000", cbStrokeW: "8", cbStroke2On: false, cbShadowOn: true, cbShadowColor: "#000000", cbShadowBlur: "14", cbShadowX: "0", cbShadowY: "4", cbGlowOn: false, cbPlateOn: false } },
+            { name: "白字胶囊", set: { cbColor: "#ffffff", cbGradOn: false, cbStrokeOn: false, cbStroke2On: false, cbShadowOn: false, cbGlowOn: false, cbPlateOn: true, cbPlateColor: "#111111", cbPlateAlpha: "62", cbPlateRadius: "30", cbPlatePad: "26" } },
+            { name: "电影双描边", set: { cbColor: "#ffd76a", cbGradOn: false, cbStrokeOn: true, cbStrokeColor: "#000000", cbStrokeW: "6", cbStroke2On: true, cbStroke2Color: "#ffffff", cbStroke2W: "16", cbShadowOn: true, cbShadowColor: "#000000", cbShadowBlur: "10", cbShadowX: "0", cbShadowY: "5", cbGlowOn: false, cbPlateOn: false } },
+        ];
+        function applyPreset(set) {
+            Object.keys(set).forEach(id => {
+                const el = $(id); if (!el) return;
+                if (el.type === "checkbox") el.checked = !!set[id]; else el.value = set[id];
+            });
+            updateValLabels();
+            updatePreview();
+        }
+        (function buildPresets() {
+            const box = $("cbPresets"); if (!box) return;
+            PRESETS.forEach(p => {
+                const b = document.createElement("button");
+                b.type = "button"; b.className = "cb-chip"; b.textContent = p.name;
+                b.onclick = () => applyPreset(p.set);
+                box.appendChild(b);
+            });
+        })();
+
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(updatePreview);
+        updateEpPreview();
+    </script>
+</body>
+
+</html>

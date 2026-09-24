@@ -1,0 +1,40 @@
+<svg width="1280" height="320" viewBox="0 0 1280 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FrameWeave 帧织：节点式 AI 图像与视频创作画布">
+  <rect width="1280" height="320" rx="20" fill="#F5F7FB"/>
+  <g opacity="0.55">
+    <circle cx="700" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="740" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="780" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="820" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="860" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="900" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="940" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="980" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="1020" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="1060" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="1100" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="1140" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="1180" cy="40" r="1.6" fill="#CBD5E1"/><circle cx="1220" cy="40" r="1.6" fill="#CBD5E1"/>
+    <circle cx="700" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="740" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="780" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="820" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="860" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="900" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="940" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="980" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="1020" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="1060" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="1100" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="1140" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="1180" cy="280" r="1.6" fill="#CBD5E1"/><circle cx="1220" cy="280" r="1.6" fill="#CBD5E1"/>
+  </g>
+
+  <g transform="translate(80 104)">
+    <rect width="112" height="112" rx="24" fill="#2563EB"/>
+    <rect x="26.8" y="26.8" width="39.7" height="39.7" rx="10.5" stroke="#FFFFFF" stroke-width="7"/>
+    <rect x="44.3" y="44.3" width="42" height="42" rx="10.5" fill="#5EEAD4"/>
+  </g>
+  <text x="224" y="158" fill="#0F172A" font-family="Inter, 'SF Pro Display', -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="56" font-weight="600">FrameWeave</text>
+  <text x="228" y="206" fill="#475569" font-family="'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" font-size="24">帧织 · 节点式 AI 图像与视频创作画布</text>
+
+  <path d="M868 118 C 930 118, 930 176, 992 176" stroke="#94A3B8" stroke-width="2.5"/>
+  <path d="M868 226 C 930 226, 930 176, 992 176" stroke="#94A3B8" stroke-width="2.5"/>
+  <path d="M1112 176 C 1150 176, 1150 176, 1176 176" stroke="#2563EB" stroke-width="2.5"/>
+
+  <g>
+    <rect x="740" y="84" width="128" height="68" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect x="752" y="96" width="36" height="44" rx="6" fill="#DBEAFE"/>
+    <rect x="798" y="102" width="56" height="8" rx="4" fill="#CBD5E1"/>
+    <rect x="798" y="118" width="40" height="8" rx="4" fill="#E2E8F0"/>
+  </g>
+  <g>
+    <rect x="740" y="192" width="128" height="68" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
+    <rect x="752" y="204" width="36" height="44" rx="6" fill="#CCFBF1"/>
+    <rect x="798" y="210" width="56" height="8" rx="4" fill="#CBD5E1"/>
+    <rect x="798" y="226" width="40" height="8" rx="4" fill="#E2E8F0"/>
+  </g>
+  <g>
+    <rect x="992" y="132" width="120" height="88" rx="10" fill="#FFFFFF" stroke="#2563EB" stroke-width="2"/>
+    <rect x="1004" y="144" width="96" height="48" rx="6" fill="#EFF6FF"/>
+    <path d="M1045 158 L1062 168 L1045 178 Z" fill="#2563EB"/>
+    <rect x="1004" y="200" width="60" height="8" rx="4" fill="#CBD5E1"/>
+  </g>
+  <circle cx="1188" cy="176" r="12" fill="#2563EB"/>
+  <path d="M1182 176 L1186 180 L1194 171" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

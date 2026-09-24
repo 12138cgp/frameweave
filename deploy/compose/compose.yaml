@@ -1,0 +1,80 @@
+name: ${COMPOSE_PROJECT_NAME:-frameweave}
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 20m
+    max-file: "5"
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-frameweave-backend:${DEPLOY_ENV:-prod}-initial}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/backend.Dockerfile
+      args:
+        BACKEND_BASE_IMAGE: ${BACKEND_BASE_IMAGE:-frameweave-backend-base:current}
+    env_file:
+      - ../runtime/${DEPLOY_ENV:-prod}.env
+    environment:
+      PORT: "8080"
+      # release 模式：去掉启动时那份逐条打印全部路由的 [GIN-debug] 路由表
+      #（139 行，等于把整个后台 API 面暴露在日志里），以及「正在 debug 模式」告警。
+      # 注意它【不会】减少每请求的访问日志——那个由 Logger 中间件控制，见 router.go。
+      GIN_MODE: release
+      STORAGE_DRIVER: postgres
+      DATABASE_DSN: ${DATABASE_DSN:?DATABASE_DSN is required}
+      APP_LOG_FILE: /app/data/logs/app.log
+      # 部署版本标识，供 /api/version 回答「有没有新版本」。
+      # 前后端拆分后 .next/BUILD_ID 只在前端容器里，后端读不到、会一路回退到 VERSION
+      #（写死的版本号，从不改变），客户端于是永远判定「没有更新」，更新提示形同虚设。
+      # 这里注入 deploy.sh 每次构建生成的发布标识（形如 test-v0.1.0-20260924080000-1a2b3c）。
+      # ⚠️ 只重建前端时要连后端一起 up，否则后端手里还是旧标识，提示不会弹。
+      APP_BUILD_ID: ${DEPLOY_RELEASE:-}
+    volumes:
+      - ${APP_DATA_DIR:?APP_DATA_DIR is required}:/app/data
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/api/health | grep -qx ok"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    stop_grace_period: 45s
+    restart: unless-stopped
+    logging: *default-logging
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-frameweave-frontend:${DEPLOY_ENV:-prod}-initial}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/frontend.Dockerfile
+      args:
+        FRONTEND_BASE_IMAGE: ${FRONTEND_BASE_IMAGE:-frameweave-frontend-base:current}
+        NEXT_PUBLIC_DOC_URL: ${NEXT_PUBLIC_DOC_URL:-}
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      API_BASE_URL: ${API_BASE_URL:-http://backend:8080}
+      PROXY_MAX_UPLOAD_MB: ${PROXY_MAX_UPLOAD_MB:-300}
+    ports:
+      - "${FRONTEND_PORT:?FRONTEND_PORT is required}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 12
+    stop_grace_period: 15s
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  default:
+    name: ${NETWORK_NAME:?NETWORK_NAME is required}

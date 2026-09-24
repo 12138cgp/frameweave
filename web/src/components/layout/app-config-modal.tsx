@@ -1,0 +1,276 @@
+"use client";
+
+import { App, Button, Form, Input, InputNumber, Modal, Segmented, Select, Switch } from "antd";
+import { useState } from "react";
+
+import { ModelPicker } from "@/components/model-picker";
+import { aspectOptions, qualityOptions } from "@/components/image-settings-panel";
+import { resolutionOptions } from "@/components/video-settings-panel";
+import { seedanceRatioOptions } from "@/lib/seedance-video";
+import { fetchImageModels } from "@/services/api/image";
+import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
+import { filterModelsByCapability, useConfigStore, useEffectiveConfig, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+
+type ModelGroup = {
+    capability: ModelCapability;
+    modelKey: "imageModel" | "videoModel" | "textModel" | "audioModel";
+    modelsKey: "imageModels" | "videoModels" | "textModels" | "audioModels";
+    defaultLabel: string;
+    optionsLabel: string;
+};
+
+const modelGroups: ModelGroup[] = [
+    { capability: "image", modelKey: "imageModel", modelsKey: "imageModels", defaultLabel: "默认生图模型", optionsLabel: "生图模型可选项" },
+    { capability: "video", modelKey: "videoModel", modelsKey: "videoModels", defaultLabel: "默认视频模型", optionsLabel: "视频模型可选项" },
+    { capability: "text", modelKey: "textModel", modelsKey: "textModels", defaultLabel: "默认文本模型", optionsLabel: "文本模型可选项" },
+    { capability: "audio", modelKey: "audioModel", modelsKey: "audioModels", defaultLabel: "默认音频模型", optionsLabel: "音频模型可选项" },
+];
+
+export function AppConfigModal() {
+    const { message } = App.useApp();
+    const [loadingModels, setLoadingModels] = useState(false);
+    const config = useConfigStore((state) => state.config);
+    const updateConfig = useConfigStore((state) => state.updateConfig);
+    const isConfigOpen = useConfigStore((state) => state.isConfigOpen);
+    const shouldPromptContinue = useConfigStore((state) => state.shouldPromptContinue);
+    const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
+    const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
+    const publicSettings = useConfigStore((state) => state.publicSettings);
+    const effectiveConfig = useEffectiveConfig();
+    const modelChannel = publicSettings?.modelChannel;
+    const allowCustomChannel = modelChannel?.allowCustomChannel === true;
+    const effectiveMode = allowCustomChannel ? config.channelMode : "remote";
+    const modelConfig = effectiveMode === "remote" ? effectiveConfig : config;
+    const modelOptions = config.models.map((model) => ({ label: model, value: model }));
+
+    const finishConfig = () => {
+        setConfigDialogOpen(false);
+        if (effectiveMode === "local" && (!config.baseUrl.trim() || !config.apiKey.trim())) return;
+        if (!modelConfig.imageModel.trim() || !modelConfig.videoModel.trim() || !modelConfig.textModel.trim()) return;
+        if (!allowCustomChannel && config.channelMode !== "remote") updateConfig("channelMode", "remote");
+        message.success(shouldPromptContinue ? "配置已保存，请继续刚才的请求" : "配置已保存");
+        clearPromptContinue();
+    };
+
+    const refreshModels = async () => {
+        if (effectiveMode === "remote") return;
+        if (!config.baseUrl.trim() || !config.apiKey.trim()) {
+            message.error("请先填写 Base URL 和 API Key");
+            return;
+        }
+        setLoadingModels(true);
+        try {
+            const models = await fetchImageModels(config);
+            const imageModels = filterModelsByCapability(models, "image");
+            const videoModels = filterModelsByCapability(models, "video");
+            const textModels = filterModelsByCapability(models, "text");
+            const audioModels = filterModelsByCapability(models, "audio");
+            const nextImageModels = resolveNextCapabilityModels(config.imageModels, imageModels, models);
+            const nextVideoModels = resolveNextCapabilityModels(config.videoModels, videoModels, models);
+            const nextTextModels = resolveNextCapabilityModels(config.textModels, textModels, models);
+            const nextAudioModels = resolveNextCapabilityModels(config.audioModels, audioModels, models);
+            updateConfig("models", models);
+            updateConfig("imageModels", nextImageModels);
+            updateConfig("videoModels", nextVideoModels);
+            updateConfig("textModels", nextTextModels);
+            updateConfig("audioModels", nextAudioModels);
+            if (nextImageModels.length && !nextImageModels.includes(config.imageModel)) updateConfig("imageModel", nextImageModels[0]);
+            if (nextVideoModels.length && !nextVideoModels.includes(config.videoModel)) updateConfig("videoModel", nextVideoModels[0]);
+            if (nextTextModels.length && !nextTextModels.includes(config.textModel)) updateConfig("textModel", nextTextModels[0]);
+            if (nextAudioModels.length && !nextAudioModels.includes(config.audioModel)) updateConfig("audioModel", nextAudioModels[0]);
+            message.success("模型列表已更新");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "读取模型失败");
+        } finally {
+            setLoadingModels(false);
+        }
+    };
+
+    const updateCapabilityModels = (group: ModelGroup, models: string[]) => {
+        const next = uniqueModels(models);
+        updateConfig(group.modelsKey, next);
+        if (!next.includes(config[group.modelKey])) updateConfig(group.modelKey, next[0] || "");
+    };
+
+    return (
+        <Modal
+            title={
+                <div>
+                    <div className="font-heading text-lg font-medium tracking-wide">配置与用户偏好</div>
+                    <div className="mt-1 text-xs font-normal text-muted-foreground">模型、渠道和画布默认行为</div>
+                </div>
+            }
+            open={isConfigOpen}
+            width={960}
+            centered
+            onCancel={() => setConfigDialogOpen(false)}
+            styles={{ body: { maxHeight: "72vh", overflowY: "auto", paddingRight: 18 } }}
+            footer={
+                <Button type="primary" onClick={finishConfig}>
+                    完成
+                </Button>
+            }
+        >
+            <div className="pt-1">
+                <Form layout="vertical" requiredMark={false}>
+                    {allowCustomChannel ? (
+                        <Form.Item label="渠道模式" className="mb-5">
+                            <Segmented
+                                block
+                                size="middle"
+                                value={effectiveMode}
+                                onChange={(value) => updateConfig("channelMode", value as AiConfig["channelMode"])}
+                                options={[
+                                    { label: "本地直连", value: "local" },
+                                    { label: "云端渠道", value: "remote" },
+                                ]}
+                            />
+                        </Form.Item>
+                    ) : null}
+                    {effectiveMode === "local" ? (
+                        <>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <Form.Item label="Base URL" className="mb-4">
+                                    <Input value={config.baseUrl} onChange={(event) => updateConfig("baseUrl", event.target.value)} />
+                                </Form.Item>
+                                <Form.Item label="API Key" className="mb-4">
+                                    <Input.Password value={config.apiKey} onChange={(event) => updateConfig("apiKey", event.target.value)} />
+                                </Form.Item>
+                            </div>
+                            <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-border bg-card/50 px-3.5 py-2.5">
+                                <div className="min-w-0">
+                                    <div className="text-sm font-medium">模型列表</div>
+                                    <div className="mt-1 text-xs text-muted-foreground">当前已保存 {config.models.length} 个模型</div>
+                                </div>
+                                <Button size="small" loading={loadingModels} onClick={() => void refreshModels()}>
+                                    拉取模型列表
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="mb-5 rounded-xl border border-border bg-card/50 px-3.5 py-3 text-sm text-muted-foreground">
+                            <div className="font-medium text-foreground">云端渠道</div>
+                            <div className="mt-1">由系统后台渠道转发请求，当前可用 {modelChannel?.availableModels.length || 0} 个模型。</div>
+                        </div>
+                    )}
+                    {effectiveMode === "local" ? (
+                        <section className="mb-5 rounded-xl border border-border bg-card/50 p-4">
+                            <div className="mb-4">
+                                <div className="text-sm font-semibold">本地模型可选项</div>
+                                <div className="mt-1 text-xs text-muted-foreground">从已拉取模型中选择哪些模型可进入各类下拉。</div>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                {modelGroups.map((group) => (
+                                    <Form.Item key={group.modelsKey} label={group.optionsLabel} className="mb-0">
+                                        <Select
+                                            mode="multiple"
+                                            showSearch
+                                            allowClear
+                                            maxTagCount="responsive"
+                                            placeholder={config.models.length ? `请选择${group.optionsLabel}` : "请先拉取模型列表"}
+                                            value={config[group.modelsKey]}
+                                            options={modelOptions}
+                                            onChange={(models) => updateCapabilityModels(group, models)}
+                                        />
+                                    </Form.Item>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        {modelGroups.map((group) => (
+                            <Form.Item key={group.modelKey} label={group.defaultLabel} className="mb-4">
+                                <ModelPicker config={modelConfig} value={modelConfig[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth />
+                            </Form.Item>
+                        ))}
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-4">
+                        <Form.Item label="图片节点默认比例" extra="新建图片节点默认使用，单个节点仍可单独覆盖。" className="mb-4">
+                            <Select value={config.canvasImageAspect} options={aspectOptions.map((item) => ({ label: item.label, value: item.value }))} onChange={(value) => updateConfig("canvasImageAspect", value)} />
+                        </Form.Item>
+                        <Form.Item label="图片节点默认分辨率" extra="新建图片节点默认使用，单个节点仍可单独覆盖。" className="mb-4">
+                            <Select value={config.canvasImageQuality} options={qualityOptions} onChange={(value) => updateConfig("canvasImageQuality", value)} />
+                        </Form.Item>
+                        <Form.Item label="视频节点默认比例" extra="新建视频节点默认使用，单个节点仍可单独覆盖。" className="mb-4">
+                            <Select value={config.canvasVideoRatio} options={seedanceRatioOptions.map((item) => ({ label: item.label, value: item.value }))} onChange={(value) => updateConfig("canvasVideoRatio", value)} />
+                        </Form.Item>
+                        <Form.Item label="视频节点默认分辨率" extra="新建视频节点默认使用，单个节点仍可单独覆盖。" className="mb-4">
+                            <Select value={config.canvasVideoResolution} options={resolutionOptions} onChange={(value) => updateConfig("canvasVideoResolution", value)} />
+                        </Form.Item>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-1">
+                        <Form.Item label="生成二级确认" extra="开启后，点击「生成」前会先弹窗确认是否生成。全局生效、所有画布通用，默认关闭。" className="mb-4">
+                            <Switch checked={Boolean(config.confirmBeforeGenerate)} onChange={(checked) => updateConfig("confirmBeforeGenerate", checked)} />
+                        </Form.Item>
+                        <Form.Item label="未使用参考提醒" extra="开启后，若节点接入了参考素材但提示词里没 @ 引用到，点「生成」会先提醒、避免漏用。全局生效，默认开启。" className="mb-4">
+                            <Switch checked={config.warnUnusedReferences !== false} onChange={(checked) => updateConfig("warnUnusedReferences", checked)} />
+                        </Form.Item>
+                        <Form.Item label="节点面板宽度" extra="画布上点开节点后，下方那个操作面板的宽度（像素）。模型名长时默认 620 才装得下模型选择器和设置按钮；屏幕大可以调宽，范围 420~1400。" className="mb-4">
+                            <InputNumber min={420} max={1400} step={20} addonAfter="px" style={{ width: 160 }} value={Number(config.canvasPanelWidth) || 620} onChange={(value) => updateConfig("canvasPanelWidth", String(value ?? 620))} />
+                        </Form.Item>
+                        <Form.Item label="提示词框高度" extra="上面那个面板里提示词输入框的高度（像素），默认 96。写长提示词可以调高，范围 60~400。" className="mb-4">
+                            <InputNumber min={60} max={400} step={8} addonAfter="px" style={{ width: 160 }} value={Number(config.canvasPanelPromptHeight) || 96} onChange={(value) => updateConfig("canvasPanelPromptHeight", String(value ?? 96))} />
+                        </Form.Item>
+                        <Form.Item label="复制时保留连线" extra="开启后，Ctrl+C 复制节点会一并带上与前后节点的连线，粘贴的副本自动接回上下游；关闭则复制为不带连线的独立节点。默认开启。" className="mb-4">
+                            <Switch checked={config.copyKeepConnections !== false} onChange={(checked) => updateConfig("copyKeepConnections", checked)} />
+                        </Form.Item>
+                        <Form.Item label="生成视频前自动肖像授权" extra="开启后，视频节点点「生成」时会把接入的参考图片/视频/音频里还没认证过的自动送审，已认证的跳过。认证过的素材生成更快、也不会因为素材过期而失败。最多等 40 秒，等不到的照常出片、不受影响。默认开启。" className="mb-4">
+                            <Switch checked={config.autoEnrollPortraits !== false} onChange={(checked) => updateConfig("autoEnrollPortraits", checked)} />
+                        </Form.Item>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-4">
+                        <Form.Item label="画布默认生图张数" extra="新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。" className="mb-4">
+                            <Input
+                                type="number"
+                                min={1}
+                                max={15}
+                                value={config.canvasImageCount}
+                                onChange={(event) => updateConfig("canvasImageCount", event.target.value)}
+                                onBlur={(event) => updateConfig("canvasImageCount", normalizeImageCount(event.target.value))}
+                            />
+                        </Form.Item>
+                        <Form.Item label="默认音频声音" className="mb-4">
+                            <Select value={config.audioVoice} options={audioVoiceOptions} onChange={(value) => updateConfig("audioVoice", value)} />
+                        </Form.Item>
+                        <Form.Item label="默认音频格式" className="mb-4">
+                            <Select value={config.audioFormat} options={audioFormatOptions} onChange={(value) => updateConfig("audioFormat", value)} />
+                        </Form.Item>
+                        <Form.Item label="默认音频语速" className="mb-4">
+                            <Input
+                                type="number"
+                                min={0.25}
+                                max={4}
+                                step={0.05}
+                                value={config.audioSpeed}
+                                onChange={(event) => updateConfig("audioSpeed", event.target.value)}
+                                onBlur={(event) => updateConfig("audioSpeed", normalizeAudioSpeedValue(event.target.value))}
+                            />
+                        </Form.Item>
+                    </div>
+                    <Form.Item label="默认音频指令" className="mb-4">
+                        <Input.TextArea rows={2} value={config.audioInstructions} placeholder="例如：自然、温暖、适合旁白。" onChange={(event) => updateConfig("audioInstructions", event.target.value)} />
+                    </Form.Item>
+                    {effectiveMode === "local" ? (
+                        <Form.Item label="系统提示词" className="mb-0">
+                            <Input.TextArea rows={3} value={config.systemPrompt} placeholder="例如：你是一位擅长电影感写实摄影的视觉导演。" onChange={(event) => updateConfig("systemPrompt", event.target.value)} />
+                        </Form.Item>
+                    ) : null}
+                </Form>
+            </div>
+        </Modal>
+    );
+}
+
+function normalizeImageCount(value: string) {
+    return String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(value)) || 3))));
+}
+
+function resolveNextCapabilityModels(current: string[], suggested: string[], allModels: string[]) {
+    const available = new Set(allModels);
+    const kept = uniqueModels(current).filter((model) => available.has(model));
+    return kept.length ? kept : suggested;
+}
+
+function uniqueModels(models: string[]) {
+    return Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)));
+}

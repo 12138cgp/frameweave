@@ -1,0 +1,20 @@
+.next/
+out/
+node_modules/
+.env*
+!.env.example
+data/
+uploads/
+*.log
+*.tsbuildinfo
+.DS_Store
+.idea
+.claude/
+.agents/
+deploy/env/*.env
+deploy/compose/*.env
+deploy/runtime/*.env
+deploy/runtime/releases/*.env
+
+# 空 DSN 时被误建的 SQLite 文件（文件名即 DSN 片段，Windows 非法）
+?_pragma*

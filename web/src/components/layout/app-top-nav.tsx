@@ -1,0 +1,77 @@
+"use client";
+
+import { Menu } from "@/components/icons";
+import Link from "next/link";
+import { APP_NAME } from "@/constant/env";
+import { usePathname } from "next/navigation";
+
+import { brandIconSrc, navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
+import { AppConfigModal } from "@/components/layout/app-config-modal";
+import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
+import { UserStatusActions } from "@/components/layout/user-status-actions";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
+
+export function AppTopNav() {
+    const pathname = usePathname();
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const hideHeader = /^\/canvas\/[^/]+/.test(pathname);
+    const slug = pathname.split("/").filter(Boolean)[0];
+    const activeToolSlug = navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;
+
+    return (
+        <>
+            {!hideHeader ? (
+                <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-border bg-background/85 backdrop-blur-xl">
+                    <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
+                        <div className="flex min-w-0 items-center">
+                            <Link href="/" className="flex h-full shrink-0 items-center gap-2.5 leading-none !text-foreground transition-colors duration-200 hover:!text-foreground/75">
+                                <img src={brandIconSrc} alt={APP_NAME} className="size-8 shrink-0 rounded-lg" />
+                                <span className="font-heading text-[17px] font-medium tracking-wide">{APP_NAME}</span>
+                            </Link>
+
+                            <button
+                                type="button"
+                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-foreground md:hidden"
+                                onClick={() => setMobileNavOpen(true)}
+                                aria-label="打开导航菜单"
+                                title="导航菜单"
+                            >
+                                <Menu className="size-5" />
+                            </button>
+
+                            <nav className="hide-scrollbar ml-8 hidden h-16 min-w-0 items-center gap-7 overflow-x-auto md:flex">
+                                {navigationTools.map((tool) => {
+                                    const Icon = tool.icon;
+                                    const active = tool.slug === activeToolSlug;
+                                    return (
+                                        <Link
+                                            key={tool.slug}
+                                            href={`/${tool.slug}`}
+                                            className={cn(
+                                                "ink-underline-trigger flex h-16 shrink-0 items-center text-sm leading-6 transition-colors duration-200",
+                                                active ? "font-medium !text-foreground" : "!text-muted-foreground hover:!text-foreground",
+                                            )}
+                                        >
+                                            <span className={cn("ink-underline flex items-center gap-2", active && "is-active")}>
+                                                {tool.iconSrc ? <img src={tool.iconSrc} alt="" className="size-5 shrink-0 rounded-md object-cover" /> : <Icon className="size-4" />}
+                                                <span className="truncate">{tool.label}</span>
+                                            </span>
+                                        </Link>
+                                    );
+                                })}
+                            </nav>
+                        </div>
+
+                        <div className="my-auto flex h-9 min-w-0 items-center justify-end gap-2 justify-self-end whitespace-nowrap">
+                            <UserStatusActions />
+                        </div>
+                    </div>
+                </header>
+            ) : null}
+
+            <MobileNavDrawer open={mobileNavOpen} activeToolSlug={activeToolSlug} onClose={() => setMobileNavOpen(false)} />
+            <AppConfigModal />
+        </>
+    );
+}

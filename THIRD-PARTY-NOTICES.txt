@@ -1,0 +1,47 @@
+第三方组件许可声明
+
+本项目自身按根目录 LICENSE（PolyForm Noncommercial License 1.0.0）发布。
+以下第三方组件与素材不属于本项目的权利范围，各自适用其原始许可条款。
+
+一、3D 场景台（web/public/director-desk/）
+   为第三方开源项目「3D 导演台」的构建产物，按 MIT 许可证分发，许可全文见本文件末尾。
+   该目录下 local-assets/ 与 models/ 中的 3D 模型和动作文件来自多个外部来源，
+   逐项出处见各子目录内的 SOURCES.md 与 *.license.txt；这些素材的权利归原作者所有，
+   使用与再分发须遵守各自的许可条款。
+
+二、界面图标（npm 依赖 @remixicon/react）
+   来自 Remix Icon（https://remixicon.com），适用 Remix Icon License v1.0：
+   允许作为应用的界面元素使用并随产品分发；不得单独售卖图标、不得用作 logo 或商标。
+   本项目的 logo（web/public/logo-mark.svg、web/src/app/icon.svg）为独立绘制，不取自该图标库。
+
+三、模型厂商标识（web/public/icons/）
+   其中的厂商 logo 分别为各自权利人的商标，仅用于在界面上标识对应的模型来源。
+
+四、其余 npm / Go 依赖
+   见 web/package.json 与 go.mod，各依赖的许可条款以其发布包内的声明为准。
+
+────────────────────────────────────────────────
+「3D 导演台」MIT 许可全文：
+
+────────────────────────────────────────────────
+MIT License
+
+Copyright (c) 2026 YZ
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

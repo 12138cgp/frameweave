@@ -1,0 +1,215 @@
+{
+  "_readme": [
+    "模型类型名字判据的【前后端对拍样本】。两边共用这一个文件：",
+    "  后端 go test ./service -run TestModelKind",
+    "  前端 bun web/scripts/check-model-kind-parity.ts   （或 node --experimental-strip-types）",
+    "",
+    "keywords = 关键词表本身的契约。两边都要逐项（含顺序）与自己的数组比对——",
+    "  这一段比 cases 更重要：cases 只能发现「删掉某个【恰好有样本能区分】的词」，",
+    "  既堵不住单边【新增】一个词（新词天然没有样本触发），也堵不住删掉没有样本覆盖的词。",
+    "  实测过：只删后端的 \"video\" 一词，光看 cases 两边全绿。",
+    "",
+    "cases = 端到端的分类结果，防的是「表一样但判定顺序/互斥逻辑被改坏」。",
+    "新增模型时把名字补进 cases；改关键词时 keywords 与两边的源码必须同时改。"
+  ],
+  "keywords": {
+    "videoExact": [],
+    "video": [
+      "seedance",
+      "video",
+      "sora",
+      "veo",
+      "kling",
+      "wan2.",
+      "hailuo"
+    ],
+    "image": [
+      "seedream",
+      "gpt-image",
+      "image",
+      "dall-e",
+      "dalle",
+      "imagen",
+      "flux",
+      "sdxl",
+      "stable-diffusion",
+      "midjourney",
+      "banana"
+    ],
+    "audio": [
+      "tts",
+      "speech",
+      "voice",
+      "music",
+      "sound"
+    ],
+    "audioAmbiguous": [
+      "audio"
+    ]
+  },
+  "cases": [
+    {
+      "model": "deepseek-v4-flash-260425",
+      "kind": "text"
+    },
+    {
+      "model": "deepseek-v4-pro-260425",
+      "kind": "text"
+    },
+    {
+      "model": "doubao-seed-2-0-pro-260215",
+      "kind": "text"
+    },
+    {
+      "model": "doubao-seed-2-1-pro-260628",
+      "kind": "text"
+    },
+    {
+      "model": "gpt-5.5",
+      "kind": "text"
+    },
+    {
+      "model": "doubao-seedance-2-0-260128",
+      "kind": "video"
+    },
+    {
+      "model": "doubao-seedance-2-0-fast-260128",
+      "kind": "video"
+    },
+    {
+      "model": "doubao-seedance-2-0-mini-260615",
+      "kind": "video"
+    },
+    {
+      "model": "doubao-seedance-2-5-260628",
+      "kind": "video"
+    },
+    {
+      "model": "doubao-seedream-5-0-260128",
+      "kind": "image"
+    },
+    {
+      "model": "doubao-seedream-5-0-pro-260628",
+      "kind": "image"
+    },
+    {
+      "model": "gpt-image-2",
+      "kind": "image"
+    },
+    {
+      "model": "gpt-image-2-4k",
+      "kind": "image"
+    },
+    {
+      "model": "gpt-image-2.5-sunburst-4k",
+      "kind": "image"
+    },
+    {
+      "model": "gemini-3-pro-image-preview",
+      "kind": "image"
+    },
+    {
+      "model": "gemini-3.1-flash-image-preview",
+      "kind": "image"
+    },
+    {
+      "model": "nano-banana-pro",
+      "kind": "image"
+    },
+    {
+      "model": "doubao-tts",
+      "kind": "audio"
+    },
+    {
+      "model": "doubao-tts-icl",
+      "kind": "audio"
+    },
+    {
+      "model": "seed-audio-1.0",
+      "kind": "audio"
+    },
+    {
+      "model": "gpt-4o-mini-tts",
+      "kind": "audio"
+    },
+    {
+      "model": "sora-2",
+      "kind": "video",
+      "note": "这批名字不含 seedance/video/image 这类常见词，最容易在某一边被漏掉"
+    },
+    {
+      "model": "veo-3",
+      "kind": "video"
+    },
+    {
+      "model": "kling-v2-master",
+      "kind": "video"
+    },
+    {
+      "model": "hailuo-02",
+      "kind": "video"
+    },
+    {
+      "model": "wan2.2-t2v",
+      "kind": "video"
+    },
+    {
+      "model": "wanx2.1-imageedit",
+      "kind": "image",
+      "note": "⚠️ 回归样本：曾经把关键词写成 wan（而不是 wan2.），这个图片模型被判成视频并落盘。"
+    },
+    {
+      "model": "wanx-v1",
+      "kind": "text",
+      "note": "同上，名字里没有 image 词，落 text 且不落盘"
+    },
+    {
+      "model": "dall-e-3",
+      "kind": "image"
+    },
+    {
+      "model": "imagen-3",
+      "kind": "image"
+    },
+    {
+      "model": "flux-1.1-pro",
+      "kind": "image"
+    },
+    {
+      "model": "sdxl-turbo",
+      "kind": "image"
+    },
+    {
+      "model": "stable-diffusion-3",
+      "kind": "image"
+    },
+    {
+      "model": "midjourney-v7",
+      "kind": "image"
+    },
+    {
+      "model": "suno-music-v1",
+      "kind": "audio"
+    },
+    {
+      "model": "seedance-audio-probe",
+      "kind": "video",
+      "note": "同上：seedance(视频词) 胜过弱音频词 audio。"
+    },
+    {
+      "model": "gpt-image-tts-probe",
+      "kind": "audio",
+      "note": "强音频词 tts 优先于 image。"
+    },
+    {
+      "model": "wanx2.1-t2i-turbo",
+      "kind": "text",
+      "note": "通义万相 Wanx 是【图片】模型。关键词收窄成 wan2. 之后它不再被误判成视频；名字里没有任何 image 词所以落到 text，但因为一个关键词都没命中，不会被写进 modelMetas，管理员在后台标一下即可。"
+    },
+    {
+      "model": "veo3-audio",
+      "kind": "video",
+      "note": "⚠️ 回归样本：veo3-audio 是【带声音的视频模型】。\"audio\" 是弱音频词，输给视频词；否则它会被永久落盘成音频、从视频下拉里消失。"
+    }
+  ]
+}

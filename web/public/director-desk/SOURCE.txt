@@ -1,0 +1,4 @@
+本目录为第三方开源项目「3D 导演台」的构建产物，非本仓库源码，按 MIT 许可证分发。
+许可与版权声明见根目录 THIRD-PARTY-NOTICES.txt。
+
+由 Next 静态服务在同源 /director-desk/ 路径提供，画布的「3D 导演台」节点用 iframe 嵌入。
