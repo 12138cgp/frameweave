@@ -95,6 +95,14 @@ See the [deployment guide](docs/部署指南.md) (Chinese) for the full procedur
 - [Developer guide](docs/开发者指南.md): architecture, data flow, billing design, extension guide, known issues
 - [Changelog](CHANGELOG.md), [Contributing](CONTRIBUTING.md), [Security](SECURITY.md)
 
+## Acknowledgements
+
+FrameWeave is built on **[infinite-canvas](https://github.com/basketikun/infinite-canvas)** by basketikun, released
+under the MIT License — our thanks to the original author. It also uses [Remix Icon](https://remixicon.com), an
+embedded 3D stage component (MIT), [Ant Design](https://ant.design), [Next.js](https://nextjs.org),
+[Tailwind CSS](https://tailwindcss.com) and other open-source projects. See
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) for details.
+
 ## License
 
 FrameWeave is released under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, modify and share it

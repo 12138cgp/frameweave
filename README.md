@@ -138,8 +138,11 @@ bash deploy/deploy.sh up --env prod all
 
 ## 致谢
 
-本项目使用了以下第三方组件与素材，各自适用其原始许可条款，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)：
+FrameWeave 基于 basketikun 的开源项目 [infinite-canvas](https://github.com/basketikun/infinite-canvas)（MIT 许可）二次开发，特此向原作者致谢。
 
+本项目还使用了以下基础项目、第三方组件与素材，各自适用其原始许可条款，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)：
+
+- [infinite-canvas](https://github.com/basketikun/infinite-canvas)：本项目的上游基础项目（MIT）
 - [Remix Icon](https://remixicon.com)：界面图标
 - 「3D 导演台」：3D 场景台的内嵌组件（MIT）
 - [Ant Design](https://ant.design)、[Next.js](https://nextjs.org)、[Tailwind CSS](https://tailwindcss.com) 等开源项目
